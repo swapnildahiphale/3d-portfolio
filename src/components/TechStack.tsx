@@ -1,18 +1,10 @@
 import * as THREE from "three";
 import { useRef, useMemo, useState, useEffect } from "react";
 import { Canvas, useFrame } from "@react-three/fiber";
-import { Environment } from "@react-three/drei";
-import { EffectComposer, N8AO } from "@react-three/postprocessing";
-import {
-  BallCollider,
-  Physics,
-  RigidBody,
-  CylinderCollider,
-  RapierRigidBody,
-} from "@react-three/rapier";
+import { useTexture, Billboard, Html, Environment } from "@react-three/drei";
+import { EffectComposer, Bloom } from "@react-three/postprocessing";
 
-const textureLoader = new THREE.TextureLoader();
-const imageUrls = [
+const LOGO_URLS = [
   "/images/aws.png",
   "/images/kubernetes.png",
   "/images/terraform.png",
@@ -22,189 +14,331 @@ const imageUrls = [
   "/images/agentic-ai.png",
   "/images/langgraph.png",
 ];
-const textures = imageUrls.map((url) => textureLoader.load(url));
 
-const sphereGeometry = new THREE.SphereGeometry(1, 28, 28);
+const TECH_NAMES = [
+  "AWS", "Kubernetes", "Terraform", "Python",
+  "Grafana", "Elastic", "Agentic AI", "LangGraph",
+];
 
-const spheres = [...Array(30)].map(() => ({
-  scale: [0.7, 1, 0.8, 1, 1][Math.floor(Math.random() * 5)],
-}));
-
-type SphereProps = {
-  vec?: THREE.Vector3;
-  scale: number;
-  r?: typeof THREE.MathUtils.randFloatSpread;
-  material: THREE.MeshPhysicalMaterial;
-  isActive: boolean;
+const CONFIG = {
+  attractionStrength: 2.0,
+  separationStrength: 1.5,
+  separationRadius: 2.2,
+  damping: 0.92,
+  driftSpeed: 0.4,
+  driftReassignThreshold: 1.0,
+  maxSpeed: 5.0,
+  connectionDistance: 4.5,
+  connectionOpacity: 0.18,
+  logoSize: 1.3,
 };
 
-function SphereGeo({
-  vec = new THREE.Vector3(),
-  scale,
-  r = THREE.MathUtils.randFloatSpread,
-  material,
+interface Particle {
+  position: THREE.Vector3;
+  velocity: THREE.Vector3;
+  driftTarget: THREE.Vector3;
+}
+
+function useParticles(count: number): React.MutableRefObject<Particle[]> {
+  const particles = useRef<Particle[]>([]);
+
+  useMemo(() => {
+    particles.current = Array.from({ length: count }, () => ({
+      position: new THREE.Vector3(
+        THREE.MathUtils.randFloatSpread(10),
+        THREE.MathUtils.randFloatSpread(6),
+        THREE.MathUtils.randFloatSpread(4),
+      ),
+      velocity: new THREE.Vector3(),
+      driftTarget: new THREE.Vector3(
+        THREE.MathUtils.randFloatSpread(8),
+        THREE.MathUtils.randFloatSpread(5),
+        THREE.MathUtils.randFloatSpread(3),
+      ),
+    }));
+  }, [count]);
+
+  return particles;
+}
+
+function MouseTracker({
+  mouseWorld,
+}: {
+  mouseWorld: React.MutableRefObject<THREE.Vector3>;
+}) {
+  const plane = useMemo(() => new THREE.Plane(new THREE.Vector3(0, 0, 1), 0), []);
+  const raycaster = useMemo(() => new THREE.Raycaster(), []);
+  const intersection = useMemo(() => new THREE.Vector3(), []);
+
+  useFrame(({ pointer, camera }) => {
+    raycaster.setFromCamera(pointer, camera);
+    if (raycaster.ray.intersectPlane(plane, intersection)) {
+      mouseWorld.current.lerp(intersection, 0.1);
+    }
+  });
+
+  return null;
+}
+
+function SimulationLoop({
+  particles,
+  mouseWorld,
+  mouseActive,
   isActive,
-}: SphereProps) {
-  const api = useRef<RapierRigidBody | null>(null);
+}: {
+  particles: React.MutableRefObject<Particle[]>;
+  mouseWorld: React.MutableRefObject<THREE.Vector3>;
+  mouseActive: React.MutableRefObject<boolean>;
+  isActive: boolean;
+}) {
+  const tempVec = useMemo(() => new THREE.Vector3(), []);
 
-  useFrame((_state, delta) => {
+  useFrame((_, delta) => {
     if (!isActive) return;
-    delta = Math.min(0.1, delta);
-    const impulse = vec
-      .copy(api.current!.translation())
-      .normalize()
-      .multiply(
-        new THREE.Vector3(
-          -50 * delta * scale,
-          -150 * delta * scale,
-          -50 * delta * scale
-        )
-      );
+    delta = Math.min(delta, 0.05);
 
-    api.current?.applyImpulse(impulse, true);
+    const pts = particles.current;
+
+    for (let i = 0; i < pts.length; i++) {
+      const p = pts[i];
+
+      // 1. Attraction toward cursor OR gentle drift
+      if (mouseActive.current) {
+        tempVec.copy(mouseWorld.current).sub(p.position);
+        const dist = Math.max(tempVec.length(), 0.5);
+        const strength = CONFIG.attractionStrength / dist;
+        tempVec.normalize().multiplyScalar(strength * delta * 60);
+        p.velocity.add(tempVec);
+      } else {
+        tempVec.copy(p.driftTarget).sub(p.position);
+        tempVec.normalize().multiplyScalar(CONFIG.driftSpeed * delta * 60);
+        p.velocity.add(tempVec);
+
+        if (p.position.distanceTo(p.driftTarget) < CONFIG.driftReassignThreshold) {
+          p.driftTarget.set(
+            THREE.MathUtils.randFloatSpread(8),
+            THREE.MathUtils.randFloatSpread(5),
+            THREE.MathUtils.randFloatSpread(3),
+          );
+        }
+      }
+
+      // 2. Separation
+      for (let j = 0; j < pts.length; j++) {
+        if (i === j) continue;
+        tempVec.copy(p.position).sub(pts[j].position);
+        const dist = tempVec.length();
+        if (dist < CONFIG.separationRadius && dist > 0.01) {
+          const push =
+            CONFIG.separationStrength *
+            (1 - dist / CONFIG.separationRadius) *
+            delta * 60;
+          tempVec.normalize().multiplyScalar(push);
+          p.velocity.add(tempVec);
+        }
+      }
+
+      // 3. Damping
+      p.velocity.multiplyScalar(CONFIG.damping);
+
+      // 4. Speed clamp
+      if (p.velocity.length() > CONFIG.maxSpeed) {
+        p.velocity.normalize().multiplyScalar(CONFIG.maxSpeed);
+      }
+
+      // 5. Integrate
+      p.position.addScaledVector(p.velocity, delta * 60);
+    }
+  });
+
+  return null;
+}
+
+const WHITE = new THREE.Color(1, 1, 1);
+
+function LogoParticle({
+  particle,
+  textureUrl,
+  name,
+}: {
+  particle: Particle;
+  textureUrl: string;
+  name: string;
+}) {
+  const groupRef = useRef<THREE.Group>(null!);
+  const texture = useTexture(textureUrl);
+  const [hovered, setHovered] = useState(false);
+
+  useFrame(() => {
+    if (groupRef.current) groupRef.current.position.copy(particle.position);
   });
 
   return (
-    <RigidBody
-      linearDamping={0.75}
-      angularDamping={0.15}
-      friction={0.2}
-      position={[r(20), r(20) - 25, r(20) - 10]}
-      ref={api}
-      colliders={false}
-    >
-      <BallCollider args={[scale]} />
-      <CylinderCollider
-        rotation={[Math.PI / 2, 0, 0]}
-        position={[0, 0, 1.2 * scale]}
-        args={[0.15 * scale, 0.275 * scale]}
-      />
-      <mesh
-        castShadow
-        receiveShadow
-        scale={scale}
-        geometry={sphereGeometry}
-        material={material}
-        rotation={[0.3, 1, 1]}
-      />
-    </RigidBody>
+    <group ref={groupRef}>
+      <Billboard follow lockX={false} lockY={false} lockZ={false}>
+        <mesh
+          onPointerOver={(e) => {
+            e.stopPropagation();
+            setHovered(true);
+            document.body.style.cursor = "pointer";
+          }}
+          onPointerOut={() => {
+            setHovered(false);
+            document.body.style.cursor = "auto";
+          }}
+        >
+          <planeGeometry args={[CONFIG.logoSize, CONFIG.logoSize]} />
+          <meshStandardMaterial
+            map={texture}
+            transparent
+            alphaTest={0.05}
+            emissive={WHITE}
+            emissiveMap={texture}
+            emissiveIntensity={hovered ? 0.8 : 0.2}
+            toneMapped={false}
+          />
+        </mesh>
+
+        {hovered && (
+          <Html center distanceFactor={10} style={{ pointerEvents: "none" }}>
+            <div
+              style={{
+                background: "rgba(0,0,0,0.75)",
+                color: "#fff",
+                padding: "4px 12px",
+                borderRadius: "6px",
+                fontSize: "13px",
+                fontWeight: 600,
+                whiteSpace: "nowrap",
+                fontFamily: "Geist, sans-serif",
+              }}
+            >
+              {name}
+            </div>
+          </Html>
+        )}
+      </Billboard>
+    </group>
   );
 }
 
-type PointerProps = {
-  vec?: THREE.Vector3;
-  isActive: boolean;
-};
+function ConstellationLines({
+  particles,
+}: {
+  particles: React.MutableRefObject<Particle[]>;
+}) {
+  const n = LOGO_URLS.length;
+  const maxPairs = (n * (n - 1)) / 2;
 
-function Pointer({ vec = new THREE.Vector3(), isActive }: PointerProps) {
-  const ref = useRef<RapierRigidBody>(null);
+  const positions = useMemo(
+    () => new Float32Array(maxPairs * 6),
+    [maxPairs]
+  );
 
-  useFrame(({ pointer, viewport }) => {
-    if (!isActive) return;
-    const targetVec = vec.lerp(
-      new THREE.Vector3(
-        (pointer.x * viewport.width) / 2,
-        (pointer.y * viewport.height) / 2,
-        0
-      ),
-      0.2
-    );
-    ref.current?.setNextKinematicTranslation(targetVec);
+  const geometry = useMemo(() => {
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute("position", new THREE.BufferAttribute(positions, 3));
+    return geo;
+  }, [positions]);
+
+  useFrame(() => {
+    let idx = 0;
+    const pts = particles.current;
+    for (let i = 0; i < pts.length; i++) {
+      for (let j = i + 1; j < pts.length; j++) {
+        if (pts[i].position.distanceTo(pts[j].position) < CONFIG.connectionDistance) {
+          positions[idx++] = pts[i].position.x;
+          positions[idx++] = pts[i].position.y;
+          positions[idx++] = pts[i].position.z;
+          positions[idx++] = pts[j].position.x;
+          positions[idx++] = pts[j].position.y;
+          positions[idx++] = pts[j].position.z;
+        }
+      }
+    }
+    positions.fill(0, idx);
+    geometry.attributes.position.needsUpdate = true;
+    geometry.setDrawRange(0, idx / 3);
   });
 
   return (
-    <RigidBody
-      position={[100, 100, 100]}
-      type="kinematicPosition"
-      colliders={false}
-      ref={ref}
-    >
-      <BallCollider args={[2]} />
-    </RigidBody>
+    <lineSegments geometry={geometry}>
+      <lineBasicMaterial
+        color="#6688ff"
+        transparent
+        opacity={CONFIG.connectionOpacity}
+        depthWrite={false}
+      />
+    </lineSegments>
   );
 }
 
 const TechStack = () => {
   const [isActive, setIsActive] = useState(false);
+  const mouseWorld = useRef(new THREE.Vector3());
+  const mouseActive = useRef(false);
+  const particles = useParticles(LOGO_URLS.length);
 
   useEffect(() => {
     const handleScroll = () => {
-      const scrollY = window.scrollY || document.documentElement.scrollTop;
-      const threshold = document
-        .getElementById("work")!
-        .getBoundingClientRect().top;
-      setIsActive(scrollY > threshold);
+      const workEl = document.getElementById("work");
+      if (!workEl) return;
+      const threshold = workEl.getBoundingClientRect().top;
+      setIsActive(window.scrollY > threshold);
     };
-    document.querySelectorAll(".header a").forEach((elem) => {
-      const element = elem as HTMLAnchorElement;
-      element.addEventListener("click", () => {
-        const interval = setInterval(() => {
-          handleScroll();
-        }, 10);
-        setTimeout(() => {
-          clearInterval(interval);
-        }, 1000);
-      });
-    });
     window.addEventListener("scroll", handleScroll);
-    return () => {
-      window.removeEventListener("scroll", handleScroll);
-    };
-  }, []);
-  const materials = useMemo(() => {
-    return textures.map(
-      (texture) =>
-        new THREE.MeshPhysicalMaterial({
-          map: texture,
-          emissive: "#ffffff",
-          emissiveMap: texture,
-          emissiveIntensity: 0.3,
-          metalness: 0.5,
-          roughness: 1,
-          clearcoat: 0.1,
-        })
-    );
+    return () => window.removeEventListener("scroll", handleScroll);
   }, []);
 
   return (
-    <div className="techstack">
-      <h2> My Techstack</h2>
+    <div
+      className="techstack"
+      onPointerEnter={() => { mouseActive.current = true; }}
+      onPointerLeave={() => { mouseActive.current = false; }}
+    >
+      <h2>My Techstack</h2>
 
       <Canvas
-        shadows
-        gl={{ alpha: true, stencil: false, depth: false, antialias: false }}
-        camera={{ position: [0, 0, 20], fov: 32.5, near: 1, far: 100 }}
-        onCreated={(state) => (state.gl.toneMappingExposure = 1.5)}
+        gl={{ alpha: true, antialias: true }}
+        camera={{ position: [0, 0, 18], fov: 38 }}
+        onCreated={(state) => { state.gl.toneMappingExposure = 1.5; }}
         className="tech-canvas"
       >
-        <ambientLight intensity={1} />
-        <spotLight
-          position={[20, 20, 25]}
-          penumbra={1}
-          angle={0.2}
-          color="white"
-          castShadow
-          shadow-mapSize={[512, 512]}
+        <ambientLight intensity={0.6} />
+        <directionalLight position={[5, 5, 5]} intensity={1.2} />
+        <pointLight position={[0, 0, 5]} intensity={0.4} color="#4488ff" />
+
+        <MouseTracker mouseWorld={mouseWorld} />
+        <SimulationLoop
+          particles={particles}
+          mouseWorld={mouseWorld}
+          mouseActive={mouseActive}
+          isActive={isActive}
         />
-        <directionalLight position={[0, 5, -4]} intensity={2} />
-        <Physics gravity={[0, 0, 0]}>
-          <Pointer isActive={isActive} />
-          {spheres.map((props, i) => (
-            <SphereGeo
-              key={i}
-              {...props}
-              material={materials[Math.floor(Math.random() * materials.length)]}
-              isActive={isActive}
-            />
-          ))}
-        </Physics>
+
+        {LOGO_URLS.map((url, i) => (
+          <LogoParticle
+            key={url}
+            particle={particles.current[i]}
+            textureUrl={url}
+            name={TECH_NAMES[i]}
+          />
+        ))}
+
+        <ConstellationLines particles={particles} />
+
         <Environment
           files="/models/char_enviorment.hdr"
-          environmentIntensity={0.5}
+          environmentIntensity={0.4}
           environmentRotation={[0, 4, 2]}
         />
+
         <EffectComposer enableNormalPass={false}>
-          <N8AO color="#0f002c" aoRadius={2} intensity={1.15} />
+          <Bloom
+            intensity={0.5}
+            luminanceThreshold={0.6}
+            luminanceSmoothing={0.9}
+          />
         </EffectComposer>
       </Canvas>
     </div>
