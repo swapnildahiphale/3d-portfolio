@@ -13,7 +13,7 @@ export function initialFX() {
   });
 
   var landingText = new SplitText(
-    [".landing-info h3", ".landing-intro h2", ".landing-intro h1"],
+    [".landing-intro h2", ".landing-intro h1"],
     {
       type: "chars,lines",
       linesClass: "split-line",
@@ -73,11 +73,55 @@ export function initialFX() {
   );
 
   var landingText3 = new SplitText(".landing-h2-info-1", TextProps);
+  var landingText6 = new SplitText(".landing-h2-info-2", TextProps);
   var landingText4 = new SplitText(".landing-h2-1", TextProps);
   var landingText5 = new SplitText(".landing-h2-2", TextProps);
 
-  LoopText(landingText2, landingText3);
+  LoopText3(landingText2, landingText3, landingText6);
   LoopText(landingText4, landingText5);
+}
+
+function LoopText3(Text1: SplitText, Text2: SplitText, Text3: SplitText) {
+  var tl = gsap.timeline({ repeat: -1, repeatDelay: 1 });
+  const delay = 3;
+
+  // Phase 1: Text1 out, Text2 in
+  tl.fromTo(
+    Text1.chars,
+    { y: 0 },
+    { y: -80, duration: 1.2, ease: "power3.inOut", stagger: 0.1, delay: delay },
+    0
+  )
+    .fromTo(
+      Text2.chars,
+      { opacity: 0, y: 80 },
+      { opacity: 1, y: 0, duration: 1.2, ease: "power3.inOut", stagger: 0.1, delay: delay },
+      0
+    )
+    // Phase 2: Text2 out, Text3 in
+    .to(
+      Text2.chars,
+      { y: -80, duration: 1.2, ease: "power3.inOut", stagger: 0.1, delay: delay },
+      1
+    )
+    .fromTo(
+      Text3.chars,
+      { opacity: 0, y: 80 },
+      { opacity: 1, y: 0, duration: 1.2, ease: "power3.inOut", stagger: 0.1, delay: delay },
+      1
+    )
+    // Phase 3: Text3 out, Text1 back in
+    .to(
+      Text3.chars,
+      { y: -80, duration: 1.2, ease: "power3.inOut", stagger: 0.1, delay: delay },
+      2
+    )
+    .fromTo(
+      Text1.chars,
+      { y: 80 },
+      { y: 0, duration: 1.2, ease: "power3.inOut", stagger: 0.1, delay: delay },
+      2
+    );
 }
 
 function LoopText(Text1: SplitText, Text2: SplitText) {
