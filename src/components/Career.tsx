@@ -15,58 +15,77 @@ const Career = () => {
           <div className="career-info-box">
             <div className="career-info-in">
               <div className="career-role">
-                <h4>Co-Founder</h4>
-                <h5>CallHQ.ai</h5>
+                <h4>Staff SRE</h4>
+                <h5>VMO India Private Limited</h5>
               </div>
               <h3>NOW</h3>
             </div>
             <p>
-              Building CallHQ.ai, a voice AI platform for
-              automating customer calls, support, and conversions.
+              Strategic execution of Call-AI acquisition, revamping services with
+              containerization and bespoke CI/CD. Architected end-to-end dynamic
+              environment provisioning for Health Exchange SaaS platform. Leading
+              AI voice agent infrastructure and agentic AI implementations.
             </p>
           </div>
           <div className="career-info-box">
             <div className="career-info-in">
               <div className="career-role">
-                <h4>Adobe</h4>
-                <h5>6+ years · Noida</h5>
+                <h4>Staff SRE</h4>
+                <h5>Mobile Premier League (MPL)</h5>
               </div>
-              <h3>2017–24</h3>
+              <h3>2019–23</h3>
             </div>
             <p>
-              Senior Lead Software Engineer (Feb 2024 – May 2024). Lead Software
-              Engineer (Feb 2021 – Feb 2024). Software Engineer II (Dec 2017 –
-              Feb 2021): internationalization, globalization, and localization for
-              Adobe Technical Communication Suite; functional and linguistic testing
-              strategy; in-house tooling; collaboration with product and engineering
-              for high-quality localized releases.
+              Led architecture and migration of 100+ microservices to Kubernetes
+              with Istio Mesh. Engineered highly available AWS infrastructure for
+              India's largest mobile gaming platform (100M+ users). Implemented
+              log management with ELK handling 10+ TB daily data. Designed
+              Terraform and Atlantis-based IaC; observability with Prometheus,
+              Thanos, and Grafana.
             </p>
           </div>
           <div className="career-info-box">
             <div className="career-info-in">
               <div className="career-role">
-                <h4>Consultant</h4>
-                <h5>Genpact Headstrong </h5>
+                <h4>Founding Member &amp; DevOps Lead</h4>
+                <h5>Crevise Technologies (Acquired by MPL)</h5>
               </div>
-              <h3>2016–17</h3>
+              <h3>2016–19</h3>
             </div>
             <p>
-              Sep 2016 – Nov 2017. Developed and maintained WCF services consumed
-              by the UI; deployment support across environments; NUnit tests and
-              coverage; bug fixes from QA and users; database work.
+              Proposed and implemented highly available, scalable architectures
+              on AWS. CI pipelines with Jenkins, infrastructure automation with
+              Chef. Monitoring and logging with DataDog and Loggly.
             </p>
           </div>
           <div className="career-info-box">
             <div className="career-info-in">
               <div className="career-role">
-                <h4>Sf Engineer</h4>
-                <h5>Infogain</h5>
+                <h4>DevOps Engineer</h4>
+                <h5>Whitehedge Technologies</h5>
               </div>
-              <h3>2013-16</h3>
+              <h3>2015–16</h3>
             </div>
             <p>
-              Software engineering across enterprise projects, contributing to
-              design, development, and delivery of business applications.
+              Led cloud migration for Cathay Pacific Airways as project lead and
+              Ansible developer. Containerized microservices with Docker and
+              Kubernetes. Integrated automated tests with CI pipeline using
+              DroneCI.
+            </p>
+          </div>
+          <div className="career-info-box">
+            <div className="career-info-in">
+              <div className="career-role">
+                <h4>DevOps Engineer</h4>
+                <h5>Webonise Labs (Haptiq)</h5>
+              </div>
+              <h3>2014–15</h3>
+            </div>
+            <p>
+              Managed Linux servers and automated deployment with Webistrano,
+              Capistrano, and Chef. Deployment automation across ROR, Django,
+              NodeJS, and Tomcat stacks. LDAP authentication, automated backups,
+              and Nagios monitoring.
             </p>
           </div>
         </div>
