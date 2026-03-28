@@ -31,16 +31,39 @@ const TECH_NAMES = [
 const CONFIG = {
   repulsionStrength: 0.075,
   repulsionRadius: 5.0,
-  separationStrength: 0.02,
-  separationRadius: 2.5,
+  separationStrength: 0.1,
+  separationRadius: 4.5,
+  centerAvoidance: 0.008,
   damping: 0.8,
   driftSpeed: 0.004,
   driftReassignThreshold: 1.5,
   maxSpeed: 0.05,
   connectionDistance: 5.5,
-  connectionOpacity: 0.18,
+  connectionOpacity: 0.0225,
   logoSize: 1.3,
+  // Exclusion zone for "MY TECHSTACK" heading (3D coords at z=0)
+  // Camera z=18, fov=38 → visible Y ±6.2. Heading at top:10px ≈ Y 5.0–6.2
+  // Add logo-size buffer around the text
+  headingZone: { xMin: -5.5, xMax: 5.5, yMin: 4.0, yMax: 6.2 },
+  headingAvoidance: 0.08,
 };
+
+// Generate a drift target biased toward edges, avoiding the heading zone
+function randomEdgeBiasedTarget(): THREE.Vector3 {
+  const hz = CONFIG.headingZone;
+  let x: number, y: number;
+  let attempts = 0;
+  do {
+    const angle = Math.random() * Math.PI * 2;
+    const radiusX = 2.5 + Math.random() * 3.5;
+    const radiusY = 1.5 + Math.random() * 2.0;
+    x = Math.cos(angle) * radiusX;
+    y = Math.sin(angle) * radiusY;
+    attempts++;
+    if (attempts > 20) break; // Avoid infinite loop; force will push it out
+  } while (x > hz.xMin && x < hz.xMax && y > hz.yMin && y < hz.yMax);
+  return new THREE.Vector3(x, y, THREE.MathUtils.randFloatSpread(2));
+}
 
 interface Particle {
   position: THREE.Vector3;
@@ -52,20 +75,26 @@ function useParticles(count: number): React.MutableRefObject<Particle[]> {
   const particles = useRef<Particle[]>([]);
 
   useMemo(() => {
-    // Visible area at z=0 with camera at z=18, fov=38: roughly ±6 X, ±3.5 Y
-    particles.current = Array.from({ length: count }, () => ({
-      position: new THREE.Vector3(
-        THREE.MathUtils.randFloatSpread(12),
-        THREE.MathUtils.randFloatSpread(7),
-        THREE.MathUtils.randFloatSpread(2),
-      ),
-      velocity: new THREE.Vector3(),
-      driftTarget: new THREE.Vector3(
-        THREE.MathUtils.randFloatSpread(12),
-        THREE.MathUtils.randFloatSpread(7),
-        THREE.MathUtils.randFloatSpread(2),
-      ),
-    }));
+    // Distribute logos evenly, avoiding the heading zone (Y 1.8–5.2)
+    const hz = CONFIG.headingZone;
+    particles.current = Array.from({ length: count }, (_, i) => {
+      let x: number, y: number;
+      let attempts = 0;
+      do {
+        const angle = (i / count) * Math.PI * 2 + Math.random() * 0.3;
+        const rx = 3.0 + Math.random() * 3.0;
+        const ry = 2.0 + Math.random() * 2.5;
+        x = Math.cos(angle) * rx;
+        y = Math.sin(angle) * ry;
+        attempts++;
+        if (attempts > 20) break;
+      } while (x > hz.xMin && x < hz.xMax && y > hz.yMin && y < hz.yMax);
+      return {
+        position: new THREE.Vector3(x, y, THREE.MathUtils.randFloatSpread(2)),
+        velocity: new THREE.Vector3(),
+        driftTarget: randomEdgeBiasedTarget(),
+      };
+    });
   }, [count]);
 
   return particles;
@@ -118,11 +147,41 @@ function SimulationLoop({
       p.velocity.add(tempVec);
 
       if (p.position.distanceTo(p.driftTarget) < CONFIG.driftReassignThreshold) {
-        p.driftTarget.set(
-          THREE.MathUtils.randFloatSpread(12),
-          THREE.MathUtils.randFloatSpread(7),
-          THREE.MathUtils.randFloatSpread(2),
-        );
+        const t = randomEdgeBiasedTarget();
+        p.driftTarget.copy(t);
+      }
+
+      // 1b. Gentle push away from center to prevent clustering
+      const centerDist = Math.sqrt(p.position.x * p.position.x + p.position.y * p.position.y);
+      if (centerDist < 4.5 && centerDist > 0.01) {
+        const avoidStr = CONFIG.centerAvoidance * (1 - centerDist / 4.5) * delta * 60;
+        tempVec.set(p.position.x, p.position.y, 0).normalize().multiplyScalar(avoidStr);
+        p.velocity.add(tempVec);
+      }
+
+      // 1c. Push logos away from heading text zone
+      const hz = CONFIG.headingZone;
+      if (
+        p.position.x > hz.xMin && p.position.x < hz.xMax &&
+        p.position.y > hz.yMin && p.position.y < hz.yMax
+      ) {
+        // Find nearest edge and push toward it
+        const distToTop = hz.yMax - p.position.y;
+        const distToBottom = p.position.y - hz.yMin;
+        const distToLeft = p.position.x - hz.xMin;
+        const distToRight = hz.xMax - p.position.x;
+        const minDist = Math.min(distToTop, distToBottom, distToLeft, distToRight);
+        if (minDist === distToTop) {
+          tempVec.set(0, 1, 0);
+        } else if (minDist === distToBottom) {
+          tempVec.set(0, -1, 0);
+        } else if (minDist === distToLeft) {
+          tempVec.set(-1, 0, 0);
+        } else {
+          tempVec.set(1, 0, 0);
+        }
+        tempVec.multiplyScalar(CONFIG.headingAvoidance * delta * 60);
+        p.velocity.add(tempVec);
       }
 
       // 2. Repulsion — push away from cursor when nearby
@@ -282,7 +341,7 @@ function ConstellationLines({
   return (
     <lineSegments geometry={geometry}>
       <lineBasicMaterial
-        color="#6688ff"
+        color="#ffffff"
         transparent
         opacity={CONFIG.connectionOpacity}
         depthWrite={false}
