@@ -6,11 +6,15 @@ const About = () => {
       <div className="about-me">
         <h3 className="title">About Me</h3>
         <p className="para">
-          I am currently co-founder of CallHQ.ai, building real-time voice AI for
-          businesses. I am a technologist at heart with strong business judgment—
-          I enjoy going from product strategy to hands-on engineering. My background
-          spans leadership at Adobe, founding Broki and CallHQ, and shipping
-          full-stack products end to end.
+          Strategic technologist with 10+ years of experience architecting
+          reliable infrastructure for platforms processing terabytes of daily
+          data. Currently a Staff SRE at VMO India, leading infrastructure for a
+          voice AI agent product and contributing to agentic AI implementations.
+          Creator of OpenSRE.in — an open-source autonomous AI-powered incident
+          investigation platform. Previously engineered highly available
+          infrastructure at MPL (Mobile Premier League), India's largest mobile
+          gaming platform serving 100M+ users. Led cloud migrations and DevOps
+          transformation at Crevise Technologies (acquired by MPL).
         </p>
       </div>
     </div>
