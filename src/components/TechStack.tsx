@@ -13,22 +13,31 @@ const LOGO_URLS = [
   "/images/elastic.png",
   "/images/agentic-ai.png",
   "/images/langgraph.png",
+  "/images/docker.png",
+  "/images/prometheus.png",
+  "/images/ansible.png",
+  "/images/argocd.png",
+  "/images/gcp.png",
+  "/images/jenkins.png",
 ];
 
 const TECH_NAMES = [
   "AWS", "Kubernetes", "Terraform", "Python",
   "Grafana", "Elastic", "Agentic AI", "LangGraph",
+  "Docker", "Prometheus", "Ansible", "Argo CD",
+  "GCP", "Jenkins",
 ];
 
 const CONFIG = {
-  attractionStrength: 2.0,
-  separationStrength: 1.5,
-  separationRadius: 2.2,
-  damping: 0.92,
-  driftSpeed: 0.4,
-  driftReassignThreshold: 1.0,
-  maxSpeed: 5.0,
-  connectionDistance: 4.5,
+  repulsionStrength: 0.075,
+  repulsionRadius: 5.0,
+  separationStrength: 0.02,
+  separationRadius: 2.5,
+  damping: 0.8,
+  driftSpeed: 0.004,
+  driftReassignThreshold: 1.5,
+  maxSpeed: 0.05,
+  connectionDistance: 5.5,
   connectionOpacity: 0.18,
   logoSize: 1.3,
 };
@@ -43,17 +52,18 @@ function useParticles(count: number): React.MutableRefObject<Particle[]> {
   const particles = useRef<Particle[]>([]);
 
   useMemo(() => {
+    // Visible area at z=0 with camera at z=18, fov=38: roughly ±6 X, ±3.5 Y
     particles.current = Array.from({ length: count }, () => ({
       position: new THREE.Vector3(
-        THREE.MathUtils.randFloatSpread(10),
-        THREE.MathUtils.randFloatSpread(6),
-        THREE.MathUtils.randFloatSpread(4),
+        THREE.MathUtils.randFloatSpread(12),
+        THREE.MathUtils.randFloatSpread(7),
+        THREE.MathUtils.randFloatSpread(2),
       ),
       velocity: new THREE.Vector3(),
       driftTarget: new THREE.Vector3(
-        THREE.MathUtils.randFloatSpread(8),
-        THREE.MathUtils.randFloatSpread(5),
-        THREE.MathUtils.randFloatSpread(3),
+        THREE.MathUtils.randFloatSpread(12),
+        THREE.MathUtils.randFloatSpread(7),
+        THREE.MathUtils.randFloatSpread(2),
       ),
     }));
   }, [count]);
@@ -102,28 +112,34 @@ function SimulationLoop({
     for (let i = 0; i < pts.length; i++) {
       const p = pts[i];
 
-      // 1. Attraction toward cursor OR gentle drift
-      if (mouseActive.current) {
-        tempVec.copy(mouseWorld.current).sub(p.position);
-        const dist = Math.max(tempVec.length(), 0.5);
-        const strength = CONFIG.attractionStrength / dist;
-        tempVec.normalize().multiplyScalar(strength * delta * 60);
-        p.velocity.add(tempVec);
-      } else {
-        tempVec.copy(p.driftTarget).sub(p.position);
-        tempVec.normalize().multiplyScalar(CONFIG.driftSpeed * delta * 60);
-        p.velocity.add(tempVec);
+      // 1. Always drift toward a wandering target (free-flowing)
+      tempVec.copy(p.driftTarget).sub(p.position);
+      tempVec.normalize().multiplyScalar(CONFIG.driftSpeed * delta * 60);
+      p.velocity.add(tempVec);
 
-        if (p.position.distanceTo(p.driftTarget) < CONFIG.driftReassignThreshold) {
-          p.driftTarget.set(
-            THREE.MathUtils.randFloatSpread(8),
-            THREE.MathUtils.randFloatSpread(5),
-            THREE.MathUtils.randFloatSpread(3),
-          );
+      if (p.position.distanceTo(p.driftTarget) < CONFIG.driftReassignThreshold) {
+        p.driftTarget.set(
+          THREE.MathUtils.randFloatSpread(12),
+          THREE.MathUtils.randFloatSpread(7),
+          THREE.MathUtils.randFloatSpread(2),
+        );
+      }
+
+      // 2. Repulsion — push away from cursor when nearby
+      if (mouseActive.current) {
+        tempVec.copy(p.position).sub(mouseWorld.current);
+        const dist = tempVec.length();
+        if (dist < CONFIG.repulsionRadius && dist > 0.01) {
+          const strength =
+            CONFIG.repulsionStrength *
+            (1 - dist / CONFIG.repulsionRadius) *
+            delta * 60;
+          tempVec.normalize().multiplyScalar(strength);
+          p.velocity.add(tempVec);
         }
       }
 
-      // 2. Separation
+      // 3. Separation between logos
       for (let j = 0; j < pts.length; j++) {
         if (i === j) continue;
         tempVec.copy(p.position).sub(pts[j].position);
@@ -199,24 +215,26 @@ function LogoParticle({
           />
         </mesh>
 
-        {hovered && (
-          <Html center distanceFactor={10} style={{ pointerEvents: "none" }}>
-            <div
-              style={{
-                background: "rgba(0,0,0,0.75)",
-                color: "#fff",
-                padding: "4px 12px",
-                borderRadius: "6px",
-                fontSize: "13px",
-                fontWeight: 600,
-                whiteSpace: "nowrap",
-                fontFamily: "Geist, sans-serif",
-              }}
-            >
-              {name}
-            </div>
-          </Html>
-        )}
+        <Html
+          center
+          position={[0, -(CONFIG.logoSize / 2 + 0.15), 0]}
+          distanceFactor={10}
+          style={{ pointerEvents: "none" }}
+        >
+          <div
+            style={{
+              color: "rgba(255,255,255,0.85)",
+              fontSize: "12px",
+              fontWeight: 500,
+              whiteSpace: "nowrap",
+              fontFamily: "Geist, sans-serif",
+              textAlign: "center",
+              letterSpacing: "0.5px",
+            }}
+          >
+            {name}
+          </div>
+        </Html>
       </Billboard>
     </group>
   );
